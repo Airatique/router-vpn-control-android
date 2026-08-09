@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="header_blue">#36527A</color>
+    <color name="header_blue_light">#4E76A2</color>
+    <color name="status_green">#1FA858</color>
+    <color name="status_red">#CE3737</color>
+    <color name="status_gray">#9E9E9E</color>
+    <color name="footer_bg">#EEEEEE</color>
+    <color name="ic_launcher_background">#233E5F</color>
+</resources>

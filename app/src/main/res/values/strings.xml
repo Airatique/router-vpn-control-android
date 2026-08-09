@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Router VPN Control</string>
+    <string name="tab_app_settings">App Settings</string>
+    <string name="tab_vpn_settings">VPN Settings</string>
+
+    <string name="label_selected_router">Selected Router</string>
+    <string name="label_vpn_status">VPN Status</string>
+    <string name="label_vpn_usage">VPN Usage</string>
+    <string name="label_backend">Backend</string>
+    <string name="label_router">Router</string>
+    <string name="label_vpn_scan">VPN Scan</string>
+
+    <string name="status_unknown">Unknown</string>
+    <string name="status_on">Green / On</string>
+    <string name="status_off">Red / Off</string>
+
+    <string name="btn_turn_on">Turn On</string>
+    <string name="btn_turn_off">Turn Off</string>
+    <string name="btn_apply_backend">Apply Backend</string>
+    <string name="btn_scan_vpn">Scan VPN</string>
+    <string name="btn_refresh">Refresh</string>
+    <string name="btn_add_router">Add Router</string>
+    <string name="btn_delete_router">Delete Router</string>
+    <string name="btn_save_settings">Save Settings</string>
+
+    <string name="hint_profile_name">Profile Name</string>
+    <string name="hint_host">Local Server IP</string>
+    <string name="hint_port">SSH Port</string>
+    <string name="hint_login">Login</string>
+    <string name="hint_password">Password</string>
+
+    <string name="scan_placeholder">VPN scan output will appear here.</string>
+    <string name="footer_ready">Ready</string>
+    <string name="backend_unknown">Backend: unknown</string>
+</resources>

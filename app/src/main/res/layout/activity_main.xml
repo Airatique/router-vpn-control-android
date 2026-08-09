@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/headerTitle"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/header_blue"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="18dp"
+        android:paddingBottom="18dp"
+        android:text="@string/app_name"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:tabGravity="fill"
+        app:tabMode="fixed">
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/tab_app_settings" />
+
+        <com.google.android.material.tabs.TabItem
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/tab_vpn_settings" />
+    </com.google.android.material.tabs.TabLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- App Settings tab -->
+        <ScrollView
+            android:id="@+id/tabApp"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_selected_router"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/appRouterSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/label_vpn_status"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/statusDot"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:text="●"
+                        android:textColor="@color/status_gray"
+                        android:textSize="26sp" />
+
+                    <TextView
+                        android:id="@+id/statusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="10dp"
+                        android:text="@string/status_unknown"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/toggleButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/btn_turn_on" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/label_backend"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/backendSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp" />
+
+                <Button
+                    android:id="@+id/applyBackendButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:text="@string/btn_apply_backend" />
+
+                <TextView
+                    android:id="@+id/backendText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/backend_unknown" />
+
+                <Button
+                    android:id="@+id/scanButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/btn_scan_vpn" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp">
+
+                    <TextView
+                        android:id="@+id/scanOutput"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="monospace"
+                        android:text="@string/scan_placeholder"
+                        android:textIsSelectable="true"
+                        android:textSize="12sp" />
+                </HorizontalScrollView>
+            </LinearLayout>
+        </ScrollView>
+
+        <!-- VPN Settings tab -->
+        <ScrollView
+            android:id="@+id/tabVpn"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="18dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/hint_profile_name"
+                    android:labelFor="@+id/settingsRouterSpinner"
+                    android:textStyle="bold" />
+
+                <Spinner
+                    android:id="@+id/settingsRouterSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <Button
+                        android:id="@+id/addRouterButton"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="6dp"
+                        android:layout_weight="1"
+                        android:text="@string/btn_add_router" />
+
+                    <Button
+                        android:id="@+id/deleteRouterButton"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:layout_weight="1"
+                        android:text="@string/btn_delete_router" />
+                </LinearLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:hint="@string/hint_profile_name">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/nameEdit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:hint="@string/hint_host">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/hostEdit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textUri" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:hint="@string/hint_port">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/portEdit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:text="22" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:hint="@string/hint_login">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/loginEdit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="text" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:hint="@string/hint_password"
+                    app:endIconMode="password_toggle">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/passwordEdit"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPassword" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <Button
+                    android:id="@+id/saveSettingsButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/btn_save_settings" />
+            </LinearLayout>
+        </ScrollView>
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/footer_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="20dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="4dp"
+        android:paddingBottom="4dp">
+
+        <TextView
+            android:id="@+id/footerStatus"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/footer_ready"
+            android:textColor="#333333" />
+
+        <Button
+            android:id="@+id/refreshButton"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/btn_refresh" />
+    </LinearLayout>
+</LinearLayout>
