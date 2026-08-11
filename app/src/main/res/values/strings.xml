@@ -19,7 +19,13 @@
     <string name="btn_turn_off">Turn Off</string>
     <string name="btn_apply_backend">Apply Backend</string>
     <string name="btn_scan_vpn">Scan VPN</string>
+    <string name="btn_import_private_key">Import Key File</string>
     <string name="btn_refresh">Refresh</string>
+    <string name="msg_key_imported">Private key imported from file</string>
+    <string name="msg_key_import_failed">Could not read the selected key file</string>
+    <string name="footer_scanning">Scanning VPN services…</string>
+    <string name="footer_scan_done">VPN scan completed, found %1$d backend(s)</string>
+    <string name="footer_scan_none">VPN scan completed, no switchable backend found</string>
     <string name="btn_add_router">Add Router</string>
     <string name="btn_delete_router">Delete Router</string>
     <string name="btn_save_settings">Save Settings</string>
@@ -29,6 +35,15 @@
     <string name="hint_port">SSH Port</string>
     <string name="hint_login">Login</string>
     <string name="hint_password">Password</string>
+    <string name="label_auth_method">SSH Authentication</string>
+    <string name="auth_method_password">Password</string>
+    <string name="auth_method_key">Private key</string>
+    <string name="hint_private_key">Private key (OpenSSH / PEM)</string>
+    <string name="hint_key_passphrase">Key passphrase (optional)</string>
+    <string-array name="auth_method_entries">
+        <item>@string/auth_method_password</item>
+        <item>@string/auth_method_key</item>
+    </string-array>
 
     <string name="scan_placeholder">VPN scan output will appear here.</string>
     <string name="footer_ready">Ready</string>

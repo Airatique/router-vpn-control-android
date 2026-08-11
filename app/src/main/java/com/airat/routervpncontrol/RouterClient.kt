@@ -3,10 +3,15 @@ package com.airat.routervpncontrol
 import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.schmizz.sshj.DefaultConfig
 import net.schmizz.sshj.SSHClient
+import net.schmizz.sshj.common.Buffer
+import net.schmizz.sshj.transport.TransportException
 import net.schmizz.sshj.transport.verification.PromiscuousVerifier
+import net.schmizz.sshj.userauth.keyprovider.KeyProvider
 import net.schmizz.sshj.userauth.method.AuthKeyboardInteractive
 import net.schmizz.sshj.userauth.method.AuthPassword
+import net.schmizz.sshj.userauth.method.AuthPublickey
 import net.schmizz.sshj.userauth.method.PasswordResponseProvider
 import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.sshj.userauth.password.PasswordFinder
@@ -53,36 +58,9 @@ class RouterClient(private val context: Context, private val settings: AppSettin
 
     private fun run(router: RouterProfile, command: String): String {
         router.normalize()
-        val ssh = SSHClient()
-        ssh.addHostKeyVerifier(PromiscuousVerifier())
-        ssh.connectTimeout = 12_000
-        ssh.timeout = 30_000
+        val ssh = connect(router)
         try {
-            ssh.connect(router.host, router.port)
-
-            // Return a fresh char[] on each call: sshj zeroes the array after an
-            // attempt, and we feed the same secret to several auth methods.
-            val password = router.getPassword()
-            val passwordFinder = object : PasswordFinder {
-                override fun reqPassword(resource: Resource<*>?): CharArray = password.toCharArray()
-                override fun shouldRetry(resource: Resource<*>?): Boolean = false
-            }
-            // Routers differ in what they advertise: ASUS-Merlin usually accepts
-            // the plain "password" method, OpenWrt/Dropbear often only offers
-            // "keyboard-interactive". Try both so auth doesn't get "exhausted".
-            try {
-                ssh.auth(
-                    router.login,
-                    AuthPassword(passwordFinder),
-                    AuthKeyboardInteractive(PasswordResponseProvider(passwordFinder))
-                )
-            } catch (e: UserAuthException) {
-                throw IOException(
-                    "SSH authentication failed for ${router.login}@${router.host}:${router.port}. " +
-                        "Check the login and password on the VPN Settings tab.",
-                    e
-                )
-            }
+            authenticate(ssh, router)
 
             ssh.startSession().use { session ->
                 // POSIX shells on the router (ash/dash/bash) choke on Windows
@@ -107,6 +85,156 @@ class RouterClient(private val context: Context, private val settings: AppSettin
                 ssh.disconnect()
             } catch (_: Exception) {
             }
+        }
+    }
+
+    private fun authenticate(ssh: SSHClient, router: RouterProfile) {
+        when (router.sshAuthMethod()) {
+            SshAuthMethod.KEY -> authenticateWithKey(ssh, router)
+            SshAuthMethod.PASSWORD -> authenticateWithPassword(ssh, router)
+        }
+    }
+
+    private fun authenticateWithPassword(ssh: SSHClient, router: RouterProfile) {
+        val password = router.getPassword()
+        if (password.isEmpty()) {
+            throw IOException(
+                "SSH password is empty for ${router.login}@${router.host}:${router.port}. " +
+                    "Enter the password on the VPN Settings tab, or switch to private-key authentication."
+            )
+        }
+        // Return a fresh char[] on each call: sshj zeroes the array after an
+        // attempt, and we feed the same secret to several auth methods.
+        val passwordFinder = object : PasswordFinder {
+            override fun reqPassword(resource: Resource<*>?): CharArray = password.toCharArray()
+            override fun shouldRetry(resource: Resource<*>?): Boolean = false
+        }
+        // Routers differ in what they advertise: ASUS-Merlin usually accepts
+        // the plain "password" method, OpenWrt/Dropbear often only offers
+        // "keyboard-interactive". Try both so auth doesn't get "exhausted".
+        try {
+            ssh.auth(
+                router.login,
+                AuthPassword(passwordFinder),
+                AuthKeyboardInteractive(PasswordResponseProvider(passwordFinder))
+            )
+        } catch (e: UserAuthException) {
+            throw IOException(
+                "SSH authentication failed for ${router.login}@${router.host}:${router.port}. " +
+                    "Check the login and password on the VPN Settings tab.",
+                e
+            )
+        }
+    }
+
+    private fun authenticateWithKey(ssh: SSHClient, router: RouterProfile) {
+        val privateKey = router.getPrivateKey().trim()
+        if (privateKey.isEmpty()) {
+            throw IOException(
+                "SSH private key is empty for ${router.login}@${router.host}:${router.port}. " +
+                    "Paste an OpenSSH/PEM private key on the VPN Settings tab."
+            )
+        }
+
+        val passphrase = router.getPrivateKeyPassphrase()
+        val keyProvider = try {
+            loadKeyProvider(ssh, privateKey, passphrase)
+        } catch (e: Exception) {
+            val hint = if (passphrase.isNotEmpty()) {
+                "Check that the key format is OpenSSH/PEM and the passphrase is correct."
+            } else {
+                "Check that the key format is OpenSSH/PEM. If the key is encrypted, enter its passphrase."
+            }
+            throw IOException(
+                "Could not load SSH private key for ${router.login}@${router.host}:${router.port}. $hint",
+                e
+            )
+        }
+
+        try {
+            ssh.auth(router.login, AuthPublickey(keyProvider))
+        } catch (e: UserAuthException) {
+            throw IOException(
+                "SSH key authentication failed for ${router.login}@${router.host}:${router.port}. " +
+                    "Confirm the public key is installed on the router and the passphrase (if any) is correct.",
+                e
+            )
+        } catch (e: Buffer.BufferException) {
+            throw IOException(
+                "SSH key authentication failed for ${router.login}@${router.host}:${router.port}. " +
+                    "The private key may be corrupted or in an unsupported format.",
+                e
+            )
+        }
+    }
+
+    private fun loadKeyProvider(ssh: SSHClient, privateKey: String, passphrase: String): KeyProvider {
+        val normalized = privateKey.replace("\r\n", "\n").replace('\r', '\n')
+        val finder = if (passphrase.isEmpty()) {
+            null
+        } else {
+            object : PasswordFinder {
+                override fun reqPassword(resource: Resource<*>?): CharArray = passphrase.toCharArray()
+                override fun shouldRetry(resource: Resource<*>?): Boolean = false
+            }
+        }
+        // String overload auto-detects OpenSSH / PKCS8 / PEM from key contents.
+        return ssh.loadKeys(normalized, null, finder)
+    }
+
+    private fun connect(router: RouterProfile): SSHClient {
+        val primary = newSshClient(waitForServerIdentification = false)
+        try {
+            primary.connect(router.host, router.port)
+            return primary
+        } catch (e: TransportException) {
+            try {
+                primary.disconnect()
+            } catch (_: Exception) {
+            }
+
+            // Some Dropbear builds close the first connection before writing their
+            // banner when an SSHJ client sends its own identification immediately.
+            // Retry once using the server-first exchange that those builds expect.
+            if (!e.message.orEmpty().contains("identification exchange", ignoreCase = true)) {
+                throw e
+            }
+
+            val compatibility = newSshClient(waitForServerIdentification = true)
+            try {
+                compatibility.connect(router.host, router.port)
+                return compatibility
+            } catch (retryError: Exception) {
+                try {
+                    compatibility.disconnect()
+                } catch (_: Exception) {
+                }
+                throw IOException(
+                    "SSH server at ${router.host}:${router.port} closed the connection " +
+                        "during identification exchange.",
+                    retryError
+                )
+            }
+        } catch (e: Exception) {
+            try {
+                primary.disconnect()
+            } catch (_: Exception) {
+            }
+            throw e
+        }
+    }
+
+    private fun newSshClient(waitForServerIdentification: Boolean): SSHClient {
+        val config = DefaultConfig().apply {
+            // A distinct, RFC-compliant product token avoids a Dropbear/SSHJ
+            // interoperability issue without claiming to be another SSH client.
+            setVersion("RouterVPNControl_1.5")
+            setWaitForServerIdentBeforeSendingClientIdent(waitForServerIdentification)
+        }
+        return SSHClient(config).apply {
+            addHostKeyVerifier(PromiscuousVerifier())
+            connectTimeout = 12_000
+            timeout = 30_000
         }
     }
 
@@ -196,7 +324,6 @@ class RouterClient(private val context: Context, private val settings: AppSettin
             val routing = normalized.contains("routing: on") ||
                 (normalized.contains("router-control: service-fallback") && (xray || singBox || otherVpn)) ||
                 (normalized.contains("router-control: service-backend") && (xray || singBox || otherVpn))
-
             val backend = when {
                 normalized.contains("active-backend: hy2-89") -> BackendMode.HY2_89
                 normalized.contains("active-backend: hy2-194") -> BackendMode.HY2_194

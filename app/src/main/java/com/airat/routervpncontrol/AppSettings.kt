@@ -52,18 +52,41 @@ class RouterBackendProfile {
     }
 }
 
+enum class SshAuthMethod {
+    PASSWORD,
+    KEY;
+
+    companion object {
+        fun fromStored(value: String?): SshAuthMethod =
+            if (value.equals("key", ignoreCase = true)) KEY else PASSWORD
+
+        fun toStored(method: SshAuthMethod): String =
+            if (method == KEY) "key" else "password"
+    }
+}
+
 class RouterProfile {
     var id: String = newId()
     var name: String = "Router"
     var host: String = ""
     var port: Int = 22
     var login: String = ""
+    /** "password" (default) or "key". Missing field in old settings = password. */
+    var authMethod: String = SshAuthMethod.toStored(SshAuthMethod.PASSWORD)
     var protectedPassword: String = ""
+    var protectedPrivateKey: String = ""
+    var protectedPrivateKeyPassphrase: String = ""
     var backends: MutableList<RouterBackendProfile> = mutableListOf()
     var selectedBackendId: String = ""
 
     val displayName: String
         get() = if (host.isBlank()) name else "$name ($host)"
+
+    fun sshAuthMethod(): SshAuthMethod = SshAuthMethod.fromStored(authMethod)
+
+    fun setSshAuthMethod(method: SshAuthMethod) {
+        authMethod = SshAuthMethod.toStored(method)
+    }
 
     fun normalize() {
         if (id.isBlank()) {
@@ -94,6 +117,7 @@ class RouterProfile {
             port = 22
         }
         login = login.trim()
+        authMethod = SshAuthMethod.toStored(sshAuthMethod())
 
         backends = backends.filter { !it.isTechnicalSingBoxEntry() }.toMutableList()
         backends.forEach { it.normalize() }
@@ -107,6 +131,19 @@ class RouterProfile {
 
     fun setPassword(password: String) {
         protectedPassword = if (password.isEmpty()) "" else CryptoBox.protect(password)
+    }
+
+    fun getPrivateKey(): String = CryptoBox.unprotect(protectedPrivateKey)
+
+    fun setPrivateKey(privateKey: String) {
+        protectedPrivateKey = if (privateKey.isBlank()) "" else CryptoBox.protect(privateKey)
+    }
+
+    fun getPrivateKeyPassphrase(): String = CryptoBox.unprotect(protectedPrivateKeyPassphrase)
+
+    fun setPrivateKeyPassphrase(passphrase: String) {
+        protectedPrivateKeyPassphrase =
+            if (passphrase.isEmpty()) "" else CryptoBox.protect(passphrase)
     }
 }
 

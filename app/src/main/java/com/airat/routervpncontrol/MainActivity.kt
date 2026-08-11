@@ -1,6 +1,10 @@
 package com.airat.routervpncontrol
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -8,12 +12,15 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.Spinner
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.launch
+import java.io.BufferedReader
+import java.io.InputStreamReader
 
 class MainActivity : AppCompatActivity() {
 
@@ -39,14 +46,30 @@ class MainActivity : AppCompatActivity() {
     private lateinit var addRouterButton: Button
     private lateinit var deleteRouterButton: Button
     private lateinit var saveSettingsButton: Button
+    private lateinit var importPrivateKeyButton: Button
     private lateinit var nameEdit: EditText
     private lateinit var hostEdit: EditText
     private lateinit var portEdit: EditText
     private lateinit var loginEdit: EditText
+    private lateinit var authMethodSpinner: Spinner
+    private lateinit var passwordLayout: View
     private lateinit var passwordEdit: EditText
+    private lateinit var privateKeySection: View
+    private lateinit var privateKeyEdit: EditText
+    private lateinit var keyPassphraseLayout: View
+    private lateinit var keyPassphraseEdit: EditText
 
     private var lastStatus: RouterStatus? = null
     private var loadingRouterProfile = false
+    private var loadingAuthMethod = false
+
+    private val importPrivateKeyLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            result.data?.data?.let { importPrivateKeyFromUri(it) }
+        }
+    }
 
     private data class BackendChoice(
         val mode: BackendMode? = null,
@@ -70,6 +93,7 @@ class MainActivity : AppCompatActivity() {
         wireEvents()
         populateRouterSpinners()
         loadSelectedRouterProfile()
+        applyToggleButton(routingEnabled = false, known = false)
 
         if (settings.selectedRouter.host.isBlank()) {
             // First launch / no router configured yet: don't try to connect
@@ -77,7 +101,7 @@ class MainActivity : AppCompatActivity() {
             // up the router first.
             tabs.getTabAt(1)?.select()
         } else {
-            lifecycleScope.launch { refreshStatus() }
+            lifecycleScope.launch { scanVpn() }
         }
     }
 
@@ -100,11 +124,18 @@ class MainActivity : AppCompatActivity() {
         addRouterButton = findViewById(R.id.addRouterButton)
         deleteRouterButton = findViewById(R.id.deleteRouterButton)
         saveSettingsButton = findViewById(R.id.saveSettingsButton)
+        importPrivateKeyButton = findViewById(R.id.importPrivateKeyButton)
         nameEdit = findViewById(R.id.nameEdit)
         hostEdit = findViewById(R.id.hostEdit)
         portEdit = findViewById(R.id.portEdit)
         loginEdit = findViewById(R.id.loginEdit)
+        authMethodSpinner = findViewById(R.id.authMethodSpinner)
+        passwordLayout = findViewById(R.id.passwordLayout)
         passwordEdit = findViewById(R.id.passwordEdit)
+        privateKeySection = findViewById(R.id.privateKeySection)
+        privateKeyEdit = findViewById(R.id.privateKeyEdit)
+        keyPassphraseLayout = findViewById(R.id.keyPassphraseLayout)
+        keyPassphraseEdit = findViewById(R.id.keyPassphraseEdit)
     }
 
     private fun wireEvents() {
@@ -118,17 +149,18 @@ class MainActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
 
+        scanButton.setOnClickListener { lifecycleScope.launch { scanVpn() } }
+        applyBackendButton.setOnClickListener { lifecycleScope.launch { switchSelectedBackend() } }
         toggleButton.setOnClickListener {
             lifecycleScope.launch {
                 if (lastStatus?.routingEnabled == true) disableVpn() else enableVpn()
             }
         }
-        applyBackendButton.setOnClickListener { lifecycleScope.launch { switchSelectedBackend() } }
-        scanButton.setOnClickListener { lifecycleScope.launch { scanVpn() } }
         refreshButton.setOnClickListener { lifecycleScope.launch { refreshStatus() } }
         addRouterButton.setOnClickListener { addRouter() }
         deleteRouterButton.setOnClickListener { deleteSelectedRouter() }
         saveSettingsButton.setOnClickListener { saveSettings(showMessage = true) }
+        importPrivateKeyButton.setOnClickListener { openPrivateKeyPicker() }
 
         val routerListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
@@ -139,6 +171,17 @@ class MainActivity : AppCompatActivity() {
         }
         appRouterSpinner.onItemSelectedListener = routerListener
         settingsRouterSpinner.onItemSelectedListener = routerListener
+
+        authMethodSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (loadingAuthMethod) {
+                    return
+                }
+                updateAuthMethodFieldsVisibility(selectedAuthMethod())
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
     }
 
     // ----- Router profiles -----
@@ -195,9 +238,12 @@ class MainActivity : AppCompatActivity() {
         store.save(settings)
         statusDot.setTextColor(ContextCompat.getColor(this, R.color.status_gray))
         statusText.text = getString(R.string.status_unknown)
-        toggleButton.text = getString(R.string.btn_turn_on)
+        applyToggleButton(routingEnabled = false, known = false)
         backendText.text = "Selected router: ${settings.selectedRouter.displayName}"
         footerStatus.text = "Selected router: ${settings.selectedRouter.displayName}"
+        if (settings.selectedRouter.host.isNotBlank()) {
+            lifecycleScope.launch { scanVpn() }
+        }
     }
 
     private fun loadSelectedRouterProfile() {
@@ -209,6 +255,9 @@ class MainActivity : AppCompatActivity() {
             portEdit.setText(routerProfile.port.toString())
             loginEdit.setText(routerProfile.login)
             passwordEdit.setText(routerProfile.getPassword())
+            privateKeyEdit.setText(routerProfile.getPrivateKey())
+            keyPassphraseEdit.setText(routerProfile.getPrivateKeyPassphrase())
+            setAuthMethodSelection(routerProfile.sshAuthMethod())
             backendText.text = "Selected router: ${routerProfile.displayName}"
             reloadBackendSpinner()
         } finally {
@@ -222,8 +271,71 @@ class MainActivity : AppCompatActivity() {
         routerProfile.host = hostEdit.text.toString().trim()
         routerProfile.port = portEdit.text.toString().trim().toIntOrNull()?.coerceIn(1, 65535) ?: 22
         routerProfile.login = loginEdit.text.toString().trim()
+        routerProfile.setSshAuthMethod(selectedAuthMethod())
         routerProfile.setPassword(passwordEdit.text.toString())
+        routerProfile.setPrivateKey(privateKeyEdit.text.toString())
+        routerProfile.setPrivateKeyPassphrase(keyPassphraseEdit.text.toString())
         routerProfile.normalize()
+    }
+
+    private fun selectedAuthMethod(): SshAuthMethod =
+        if (authMethodSpinner.selectedItemPosition == 1) SshAuthMethod.KEY else SshAuthMethod.PASSWORD
+
+    private fun setAuthMethodSelection(method: SshAuthMethod) {
+        loadingAuthMethod = true
+        try {
+            authMethodSpinner.setSelection(if (method == SshAuthMethod.KEY) 1 else 0, false)
+            updateAuthMethodFieldsVisibility(method)
+        } finally {
+            loadingAuthMethod = false
+        }
+    }
+
+    private fun updateAuthMethodFieldsVisibility(method: SshAuthMethod) {
+        val keyMode = method == SshAuthMethod.KEY
+        passwordLayout.visibility = if (keyMode) View.GONE else View.VISIBLE
+        privateKeySection.visibility = if (keyMode) View.VISIBLE else View.GONE
+        keyPassphraseLayout.visibility = if (keyMode) View.VISIBLE else View.GONE
+    }
+
+    private fun openPrivateKeyPicker() {
+        // Storage Access Framework picker. EXTRA_INITIAL_URI asks Android to open
+        // in Downloads when the DocumentsUI provider supports it (API 26+).
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(
+                Intent.EXTRA_MIME_TYPES,
+                arrayOf("*/*", "text/plain", "application/octet-stream")
+            )
+            putExtra(
+                DocumentsContract.EXTRA_INITIAL_URI,
+                DocumentsContract.buildDocumentUri(
+                    "com.android.externalstorage.documents",
+                    "primary:Download"
+                )
+            )
+        }
+        importPrivateKeyLauncher.launch(intent)
+    }
+
+    private fun importPrivateKeyFromUri(uri: Uri) {
+        try {
+            val text = contentResolver.openInputStream(uri)?.use { input ->
+                BufferedReader(InputStreamReader(input, Charsets.UTF_8)).readText()
+            }?.trim().orEmpty()
+            if (text.isEmpty()) {
+                showInfo(getString(R.string.msg_key_import_failed))
+                return
+            }
+            privateKeyEdit.setText(text)
+            if (selectedAuthMethod() != SshAuthMethod.KEY) {
+                setAuthMethodSelection(SshAuthMethod.KEY)
+            }
+            footerStatus.text = getString(R.string.msg_key_imported)
+        } catch (_: Exception) {
+            showInfo(getString(R.string.msg_key_import_failed))
+        }
     }
 
     private fun addRouter() {
@@ -317,7 +429,7 @@ class MainActivity : AppCompatActivity() {
         footerStatus.text = "Status refreshed"
     }
 
-    private suspend fun scanVpn() = runUiTask("Scanning VPN services...") {
+    private suspend fun scanVpn() = runUiTask(getString(R.string.footer_scanning)) {
         val scan = router.scanVpn()
         scanOutput.text = formatScanOutput(scan.rawOutput)
 
@@ -333,16 +445,16 @@ class MainActivity : AppCompatActivity() {
         }
 
         footerStatus.text = if (scan.backends.isNotEmpty()) {
-            "VPN scan completed, found ${scan.backends.size} backend(s)"
+            getString(R.string.footer_scan_done, scan.backends.size)
         } else {
-            "VPN scan completed, no switchable backend found"
+            getString(R.string.footer_scan_none)
         }
 
         lastStatus = router.getStatus()
         applyStatus(lastStatus!!)
     }
 
-    private suspend fun enableVpn() = runUiTask("Enabling VPN routing...") {
+    private suspend fun enableVpn() = runUiTask("Enabling VPN...") {
         val backend = getSelectedBackendChoice()
         if (backend.profile != null) {
             settings.selectedRouter.selectedBackendId = backend.profile.id
@@ -352,14 +464,14 @@ class MainActivity : AppCompatActivity() {
         }
         lastStatus = router.getStatus()
         applyStatus(lastStatus!!)
-        footerStatus.text = "VPN routing enabled"
+        footerStatus.text = "VPN turned on"
     }
 
-    private suspend fun disableVpn() = runUiTask("Disabling VPN routing...") {
+    private suspend fun disableVpn() = runUiTask("Disabling VPN...") {
         router.disable()
         lastStatus = router.getStatus()
         applyStatus(lastStatus!!)
-        footerStatus.text = "VPN routing disabled"
+        footerStatus.text = "VPN turned off"
     }
 
     private suspend fun switchSelectedBackend() = runUiTask("Switching backend...") {
@@ -403,7 +515,7 @@ class MainActivity : AppCompatActivity() {
         val colorId = if (status.routingEnabled) R.color.status_green else R.color.status_red
         statusDot.setTextColor(ContextCompat.getColor(this, colorId))
         statusText.text = getString(if (status.routingEnabled) R.string.status_on else R.string.status_off)
-        toggleButton.text = getString(if (status.routingEnabled) R.string.btn_turn_off else R.string.btn_turn_on)
+        applyToggleButton(routingEnabled = status.routingEnabled, known = true)
 
         val backend = status.backend
         val routerProfile = settings.selectedRouter
@@ -434,13 +546,29 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun applyToggleButton(routingEnabled: Boolean, known: Boolean) {
+        if (!known) {
+            toggleButton.text = getString(R.string.btn_turn_on)
+            toggleButton.setTextColor(ContextCompat.getColor(this, R.color.status_gray))
+            return
+        }
+        if (routingEnabled) {
+            toggleButton.text = getString(R.string.btn_turn_off)
+            toggleButton.setTextColor(ContextCompat.getColor(this, R.color.status_red))
+        } else {
+            toggleButton.text = getString(R.string.btn_turn_on)
+            toggleButton.setTextColor(ContextCompat.getColor(this, R.color.status_green))
+        }
+    }
+
     private fun setBusy(busy: Boolean, text: String) {
         footerStatus.text = text
         listOf(
             toggleButton, refreshButton, scanButton, applyBackendButton,
-            addRouterButton, saveSettingsButton,
-            appRouterSpinner, settingsRouterSpinner, backendSpinner,
-            nameEdit, hostEdit, portEdit, loginEdit, passwordEdit
+            addRouterButton, saveSettingsButton, importPrivateKeyButton,
+            appRouterSpinner, settingsRouterSpinner, backendSpinner, authMethodSpinner,
+            nameEdit, hostEdit, portEdit, loginEdit, passwordEdit,
+            privateKeyEdit, keyPassphraseEdit
         ).forEach { it.isEnabled = !busy }
         deleteRouterButton.isEnabled = !busy && settings.routers.size > 1
     }
